@@ -6,13 +6,13 @@ import os
 import re
 import gzip
 import pprint
+import sys
+import argparse
 
 from optparse import OptionParser
 from os import listdir
 
 ssl._create_default_https_context = ssl._create_unverified_context # pylint: disable=W0212
-
-NOW = int(time.time())
 
 pp = pprint.PrettyPrinter(indent=4)
 
@@ -20,15 +20,22 @@ pp = pprint.PrettyPrinter(indent=4)
 # Do not make changes in the GUI until this is complete.
 
 class PfSenseWebAPI:
-    def __init__(self):
+    def __init__(self, debug_level=False):
         self.browser = mechanize.Browser()
         self.browser.set_handle_robots(False)
+        self.debug_level = debug_level
+
+    def debug(self, msg):
+        if self.debug_level:
+            print msg
 
     def login(self,username,password,host):
         self.username = username
         self.password = password
         self.host = host
-        response = self.browser.open('https://' + self.host + '/index.php')
+        self.url = 'https://' + self.host
+
+        response = self.browser.open(self.url + '/index.php')
         self.browser.form = list(self.browser.forms())[0]
 
         control = self.browser.form.find_control('usernamefld')
@@ -58,12 +65,12 @@ class PfSenseWebAPI:
         response = self.browser.submit()
         request = self.browser.request
         html = response.read()
-        #print html
+        self.debug(html)
 
         return
 
     def set_admin_password(self, new_password):
-        response = self.browser.open('https://' + self.host + '/system_usermanager.php?act=edit&userid=0')
+        response = self.browser.open(self.url + '/system_usermanager.php?act=edit&userid=0')
         self.browser.form = list(self.browser.forms())[0]
         control = self.browser.form.find_control("passwordfld1")
         control.value = new_password
@@ -72,7 +79,7 @@ class PfSenseWebAPI:
 
         response = self.browser.submit(name='save')
         html = response.read()
-        print html
+        self.debug(html)
 
         return
 
@@ -92,13 +99,13 @@ class PfSenseWebAPI:
         pp.pprint(request.data)
 
         html = response.read()
-        #    print html
+        self.debug(html)
 
         return
 
 
     def squidguard_download(self):
-        response = self.browser.open('https://' + self.host + '/squidGuard/squidguard_blacklist.php')
+        response = self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php')
         self.browser.form = list(self.browser.forms())[0]
         control = self.browser.form.find_control('blacklist_url')
         blacklist = control.value
@@ -108,60 +115,64 @@ class PfSenseWebAPI:
         html = response.read()
 
         # Start the download
-        response = self.browser.open('https://' + self.host + '/squidGuard/squidguard_blacklist.php?getactivity=yes&blacklist_download_start=yes&blacklist_url=' + blacklist)
+        response = self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php?getactivity=yes&blacklist_download_start=yes&blacklist_url=' + blacklist)
 
         # Block until completed
         while True:
-            response = self.browser.open('https://' + self.host + '/squidGuard/squidguard_blacklist.php?getactivity=yes')
+            response = self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php?getactivity=yes')
             html = response.read()
-            print html
+            self.debug(html)
             if "Blacklist update complete" in html:
                 break
+            time.sleep(1)
+        print "Blacklist update complete"
         return
 
-    def restore_backup(self):
+    def restore_backup(self, config):
         for link in self.browser.links():
             if 'Backup & Restore' in link.text:
                 self.browser.click_link(link)
                 response = self.browser.follow_link(link)
                 break
-
-        #local_file = '/tmp/pfsense-config-1512885035.xml'
-        local_file = '/tmp/pfsense_dmz_config.xml'
 
         self.browser.form = list(self.browser.forms())[0]
         self.browser.form.find_control("decrypt").items[0].selected = False
-        self.browser.form.add_file(open(local_file, "rb"), "", 'config.xml')
+        self.browser.form.add_file(open(config, "rb"), "", 'config.xml')
         response = self.browser.submit(name='restore')
         html = response.read()
-        print html
+        self.debug(html)
 
         return
 
-    def download_backup(self):
+    def download_backup(self, backup_dir, compression):
         for link in self.browser.links():
             if 'Backup & Restore' in link.text:
                 self.browser.click_link(link)
                 response = self.browser.follow_link(link)
                 break
 
+        now = int(time.time())
+
         self.browser.form = list(self.browser.forms())[0]
         self.browser.form.find_control("donotbackuprrd").items[0].selected = False
-        response = self.browser.submit(name='backup')
+        response = self.browser.submit(name='download')
         xml = response.read()
+        if '<?xml version="1.0"?>' not in xml:
+            raise ValueError('Invalid non-xml response')
 
-        if COMPRESSION:
-            filename = '%s/pfsense-config-%d.xml.gz' % (BACKUPDIR, NOW)
+        if compression:
+            filename = '%s/pfsense-config-%d.xml.gz' % (backup_dir, now)
             output = gzip.open(filename, 'w')
         else:
-            filename = '%s/pfsense-config-%d.xml' % (BACKUPDIR, NOW)
+            filename = '%s/pfsense-config-%d.xml' % (backup_dir, now)
             output = open(filename, 'w')
+        print "Wrote backup to %s" % filename
         output.write(xml)
         output.close()
         return
 
 def main():
-    usage = "usage: %prog [options] arg"
+    usage = "usage: %prog [options] [restore-backup|enable-squidguard|squidguard-download|enable-snort|set-admin-password|download-backup]"
     parser = OptionParser(usage)
     parser.add_option("-u", "--username", dest="username",
                       help="login as username")
@@ -169,46 +180,53 @@ def main():
                       help="login with password")
     parser.add_option("-H", "--host", dest="host",
                       help="login to pfSense host")
-    parser.add_option("-r", "--restore-backup",
-                      dest="config")
-    parser.add_option("-S", "--enable-squidguard",
-                      action="store_true")
-    parser.add_option("-D", "--squidguard-download",
-                      action="store_true")
-    parser.add_option("-T", "--enable-snort",
-                      action="store_true")
-    parser.add_option("-P", "--set-admin-password",
-                      dest="new_password")
-    parser.add_option("-g", "--download-backup",
-                      action="store_true")
+    parser.add_option("-c", "--config", dest="config",
+                      help="config to restore")
+    parser.add_option("-n", "--new-password", dest="new_password",
+                      help="new password")
+    parser.add_option("-z", "--compress", dest="compress", action="store_true",
+                      help="compress backup")
+    parser.add_option("-b", "--backup-dir", dest="backup_dir", default="/tmp",
+                      help="backup directory")
+    parser.add_option("-d", "--debug-level", dest="debug_level", default=False,
+                      help="debug-level")
 
     (opts, args) = parser.parse_args()
 
-    #if len(args) != 1:
-    #    parser.error("incorrect number of arguments")
-    #if opt.verbose:
-    #    print "reading %s..." % options.filename
+    if not args:
+        parser.print_help()
+        sys.exit(1)
+    elif len(args) != 1:
+        parser.error("Incorrect number of arguments")
+        sys.exit(1)
 
-    api = PfSenseWebAPI()
+    api = PfSenseWebAPI(opts.debug_level)
     api.login(opts.username, opts.password, opts.host)
 
-    if opts.squidguard_download:
-        api.squidguard_download()
+    action = args[0]
 
-    if opts.enable_squidguard:
-        api.squidguard_enable()
+    try:
+        if action == 'squidguard-download':
+            api.squidguard_download()
 
-    if opts.new_password:
-        api.set_admin_password(opts.new_password)
+        elif action == 'enable-squidguard':
+            api.squidguard_enable()
 
-    if opts.enable_snort:
-        api.snort_enable()
+        elif action == 'set-admin-password':
+            api.set_admin_password(opts.new_password)
 
-    if opts.download_backup:
-        download_backup()
+        elif action == 'enable-snort':
+            api.snort_enable()
 
-#    if opts.restore_backup:
-#        api.restore_backup()
+        elif action == 'download-backup':
+            api.download_backup(opts.backup_dir, opts.compress)
+
+        elif action == 'restore-backup':
+            api.restore_backup(opts.config)
+    except KeyboardInterrupt as e:
+        print "Aborted"
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
+    sys.exit(0)
