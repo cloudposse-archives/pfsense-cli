@@ -16,9 +16,6 @@ ssl._create_default_https_context = ssl._create_unverified_context # pylint: dis
 
 pp = pprint.PrettyPrinter(indent=4)
 
-# pfSense is booting, then packages will be reinstalled in the background.
-# Do not make changes in the GUI until this is complete.
-
 class PfSenseWebAPI:
     def __init__(self, debug_level=False):
         self.browser = mechanize.Browser()
@@ -45,6 +42,17 @@ class PfSenseWebAPI:
         control.value = self.password
 
         response = self.browser.submit()
+
+    def wait_until_ready(self):
+        while True:
+            response = self.browser.open(self.url + '/index.php')
+            html = response.read()
+            if 'Do not make changes in the GUI' not in html \
+                and 'Packages are currently being reinstalled in the background' not in html:
+                break
+            print "pfSense is not ready"
+            time.sleep(1)
+        print "pfSense is ready"
 
     def snort_enable(self):
         for link in self.browser.links():
@@ -223,6 +231,13 @@ def main():
 
         elif action == 'restore-backup':
             api.restore_backup(opts.config)
+
+        elif action == 'wait-until-ready':
+            api.wait_until_ready()
+
+        else:
+            raise ValueError('Unrecognized option: ' + action)
+
     except KeyboardInterrupt as e:
         print "Aborted"
         sys.exit(1)
