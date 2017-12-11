@@ -16,6 +16,7 @@ ssl._create_default_https_context = ssl._create_unverified_context # pylint: dis
 
 pp = pprint.PrettyPrinter(indent=4)
 
+
 class PfSenseWebAPI:
     def __init__(self, debug_level=False):
         self.browser = mechanize.Browser()
@@ -26,13 +27,13 @@ class PfSenseWebAPI:
         if self.debug_level:
             print msg
 
-    def login(self,username,password,host):
+    def login(self, username, password, host):
         self.username = username
         self.password = password
         self.host = host
         self.url = 'https://' + self.host
 
-        response = self.browser.open(self.url + '/index.php')
+        self.browser.open(self.url + '/index.php')
         self.browser.form = list(self.browser.forms())[0]
 
         control = self.browser.form.find_control('usernamefld')
@@ -41,14 +42,14 @@ class PfSenseWebAPI:
         control = self.browser.form.find_control('passwordfld')
         control.value = self.password
 
-        response = self.browser.submit()
+        self.browser.submit()
 
     def wait_until_ready(self):
         while True:
             response = self.browser.open(self.url + '/index.php')
             html = response.read()
             if 'Do not make changes in the GUI' not in html \
-                and 'Packages are currently being reinstalled in the background' not in html:
+                    and 'Packages are currently being reinstalled in the background' not in html:
                 break
             print "pfSense is not ready"
             time.sleep(1)
@@ -59,7 +60,7 @@ class PfSenseWebAPI:
             if 'Snort' in link.text:
                 print "Found link " + link.url
                 self.browser.click_link(link)
-                response = self.browser.follow_link(link)
+                self.browser.follow_link(link)
                 break
         self.browser.form = list(self.browser.forms())[0]
         self.browser.form.set_all_readonly(False)
@@ -71,14 +72,14 @@ class PfSenseWebAPI:
         self.browser.form.find_control("by2toggle").value = ''
 
         response = self.browser.submit()
-        request = self.browser.request
+        self.browser.request
         html = response.read()
         self.debug(html)
 
         return
 
     def set_admin_password(self, new_password):
-        response = self.browser.open(self.url + '/system_usermanager.php?act=edit&userid=0')
+        self.browser.open(self.url + '/system_usermanager.php?act=edit&userid=0')
         self.browser.form = list(self.browser.forms())[0]
         control = self.browser.form.find_control("passwordfld1")
         control.value = new_password
@@ -91,12 +92,11 @@ class PfSenseWebAPI:
 
         return
 
-
     def squidguard_enable(self):
         for link in self.browser.links():
             if 'SquidGuard Proxy Filter' in link.text:
                 self.browser.click_link(link)
-                response = self.browser.follow_link(link)
+                self.browser.follow_link(link)
                 break
 
         self.browser.form = list(self.browser.forms())[0]
@@ -111,19 +111,19 @@ class PfSenseWebAPI:
 
         return
 
-
     def squidguard_download(self):
-        response = self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php')
+        self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php')
         self.browser.form = list(self.browser.forms())[0]
         control = self.browser.form.find_control('blacklist_url')
         blacklist = control.value
         print "Found blacklist: " + blacklist
 
         response = self.browser.submit(name='blacklist_download_start')
-        html = response.read()
+        response.read()
 
         # Start the download
-        response = self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php?getactivity=yes&blacklist_download_start=yes&blacklist_url=' + blacklist)
+        self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php?getactivity=yes'
+                                                '&blacklist_download_start=yes&blacklist_url=' + blacklist)
 
         # Block until completed
         while True:
@@ -140,7 +140,7 @@ class PfSenseWebAPI:
         for link in self.browser.links():
             if 'Backup & Restore' in link.text:
                 self.browser.click_link(link)
-                response = self.browser.follow_link(link)
+                self.browser.follow_link(link)
                 break
 
         self.browser.form = list(self.browser.forms())[0]
@@ -156,7 +156,7 @@ class PfSenseWebAPI:
         for link in self.browser.links():
             if 'Backup & Restore' in link.text:
                 self.browser.click_link(link)
-                response = self.browser.follow_link(link)
+                self.browser.follow_link(link)
                 break
 
         now = int(time.time())
@@ -179,8 +179,10 @@ class PfSenseWebAPI:
         output.close()
         return
 
+
 def main():
-    usage = "usage: %prog [options] [restore-backup|enable-squidguard|squidguard-download|enable-snort|set-admin-password|download-backup]"
+    usage = "usage: %prog [options] [restore-backup|enable-squidguard|squidguard-download|enable-snort|set-admin" \
+            "-password|download-backup] "
     parser = OptionParser(usage)
     parser.add_option("-u", "--username", dest="username",
                       help="login as username")
@@ -238,9 +240,10 @@ def main():
         else:
             raise ValueError('Unrecognized option: ' + action)
 
-    except KeyboardInterrupt as e:
+    except KeyboardInterrupt:
         print "Aborted"
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
