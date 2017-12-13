@@ -42,7 +42,14 @@ class PfSenseWebAPI:
         control = self.browser.form.find_control('passwordfld')
         control.value = self.password
 
-        self.browser.submit()
+        response = self.browser.submit()
+        html = response.read()
+
+        if 'Username or Password' in html:
+            result = 1, "Username or Password is incorrect"
+        else:
+            result = 0, "Login OK"
+        return result
 
     def wait_until_ready(self):
         while True:
@@ -211,7 +218,14 @@ def main():
         sys.exit(1)
 
     api = PfSenseWebAPI(opts.debug_level)
-    api.login(opts.username, opts.password, opts.host)
+    status, message = api.login(opts.username, opts.password, opts.host)
+
+    if status is not True:
+        print (message)
+        sys.exit(2)
+    else:
+        print (message)
+        exit(0)
 
     action = args[0]
 
