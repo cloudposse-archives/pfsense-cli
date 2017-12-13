@@ -220,12 +220,9 @@ def main():
     api = PfSenseWebAPI(opts.debug_level)
     status, message = api.login(opts.username, opts.password, opts.host)
 
-    if status is not True:
+    if status != 0:
         print (message)
-        sys.exit(2)
-    else:
-        print (message)
-        exit(0)
+        sys.exit(1)
 
     action = args[0]
 
