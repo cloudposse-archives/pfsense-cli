@@ -1,2 +1,4 @@
 # pfsense-cli
-Mechanized pfSense cli tool in python
+
+This is a simple cli that configures specific settings in pfSense by emulating a web browser using the python mechanize module.
+
