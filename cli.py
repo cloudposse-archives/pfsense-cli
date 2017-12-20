@@ -131,7 +131,7 @@ class PfSenseWebAPI:
         if 'The following input errors were detected' in html:
             result = 1, "Incorrect subnet"
         else:
-            result = 0, "ACLs is set"
+            result = 0, "ACLs are set"
         return result
 
     def squidguard_download(self):
@@ -206,9 +206,9 @@ class PfSenseWebAPI:
         response = self.browser.open(self.url + '/index.php')
         html = response.read()
         if 'System Information' in html:
-            result = 0, "Login OK"
+            result = 0, "Login is OK"
         else:
-            result = 1, "Login not OK"
+            result = 1, "Login failed"
         return result
 
 
