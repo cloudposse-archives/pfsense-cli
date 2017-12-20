@@ -118,6 +118,22 @@ class PfSenseWebAPI:
 
         return
 
+    def set_squid_acl(self, allowed_subnet):
+        self.browser.open(self.url + '/pkg_edit.php?xml=squid_nac.xml&id=0')
+        self.browser.form = list(self.browser.forms())[0]
+        control = self.browser.form.find_control('allowed_subnets')
+        control.value = allowed_subnet
+
+        response = self.browser.submit(name='submit')
+        html = response.read()
+        self.debug(html)
+
+        if 'The following input errors were detected' in html:
+            result = 1, "Incorrect subnet"
+        else:
+            result = 0, "ACLs are set"
+        return result
+
     def squidguard_download(self):
         self.browser.open(self.url + '/squidGuard/squidguard_blacklist.php')
         self.browser.form = list(self.browser.forms())[0]
@@ -186,10 +202,19 @@ class PfSenseWebAPI:
         output.close()
         return
 
+    def check_login(self):
+        response = self.browser.open(self.url + '/index.php')
+        html = response.read()
+        if 'System Information' in html:
+            result = 0, "Login is OK"
+        else:
+            result = 1, "Login failed"
+        return result
+
 
 def main():
     usage = "usage: %prog [options] [restore-backup|enable-squidguard|squidguard-download|enable-snort|set-admin" \
-            "-password|download-backup] "
+            "-password|download-backup|check-login|set-squid-acl] "
     parser = OptionParser(usage)
     parser.add_option("-u", "--username", dest="username",
                       help="login as username")
@@ -205,6 +230,8 @@ def main():
                       help="compress backup")
     parser.add_option("-b", "--backup-dir", dest="backup_dir", default="/tmp",
                       help="backup directory")
+    parser.add_option("-a", "--allowed-subnet", dest="allowed_subnet", default=False,
+                      help="squid allowed subnet")
     parser.add_option("-d", "--debug-level", dest="debug_level", default=False,
                       help="debug-level")
 
@@ -247,6 +274,12 @@ def main():
 
         elif action == 'wait-until-ready':
             api.wait_until_ready()
+
+        elif action == 'check-login':
+            api.check_login()
+
+        elif action == 'set-squid-acl':
+            api.set_squid_acl(opts.allowed_subnet)
 
         else:
             raise ValueError('Unrecognized option: ' + action)
